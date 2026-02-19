@@ -3,6 +3,12 @@ resource "aws_security_group" "dms_sg" {
   name        = "${var.project_name}-dms-sg"
   vpc_id      = var.vpc_id
 
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -77,7 +83,7 @@ resource "aws_dms_replication_task" "main" {
   replication_task_settings = jsonencode({
     TargetMetadata = {
       # 온프레미스의 테이블 구조(Schema)를 RDS에 자동으로 생성합니다.
-      TargetTablePrepMode = "DROP_AND_CREATE"
+      TargetTablePrepMode = "TRUNCATE_BEFORE_LOAD"
     }
   })
 

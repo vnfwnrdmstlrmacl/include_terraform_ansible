@@ -31,8 +31,7 @@
     insertafter: EOF
     line: "host all {{ patroni_superuser }} {{ db_subnet_cidr }} scram-sha-256"
   notify: Reload patroni via REST
-
-- name: Allow AWS DMS instance in pg_hba.conf
+- name: Allow AWS DMS subnet in pg_hba.conf
   ansible.builtin.lineinfile:
     path: "{{ patroni_pg_data_dir }}/pg_hba.conf"
     create: true
@@ -40,6 +39,6 @@
     group: postgres
     mode: "0600"
     insertafter: EOF
-    # scram-sha-256 또는 md5 등 DB 인증 방식에 맞춰 선택하세요
-    line: "host all all {{ dms_instance_ip }}/32 scram-sha-256"
+    # 특정 IP가 아닌 서브넷 대역(예: 10.2.11.0/24)을 허용
+    line: "host all all {{ dms_subnet_cidr }} scram-sha-256"
   notify: Reload patroni via REST
