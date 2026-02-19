@@ -38,6 +38,7 @@ module "tailscale_bridge" {
   ami_id             = var.bridge_ami_id
   instance_type      = var.bridge_instance_type
   # [핵심] 위에서 자동 생성한 Tailscale 키를 전달
+  idms_sg_id          = module.dms.dms_sg_id
   tailscale_auth_key = tailscale_tailnet_key.bridge_key.key
 }
 
@@ -54,6 +55,7 @@ module "rds" {
   engine_version       = var.postgres_version
   db_password          = var.db_password
   db_allocated_storage = var.db_allocated_storage
+  dms_sg_id             = module.dms.dms_sg_id
 }
 
 #################################################

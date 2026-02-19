@@ -36,3 +36,7 @@ variable "vpc_cidr" {
   description = "접속 허용을 위한 VPC 대역"
   type        = string
 }
+variable "dms_sg_id" {
+  description = "The security group ID of the DMS replication instance"
+  type        = string
+}

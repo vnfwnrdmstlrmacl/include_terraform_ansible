@@ -20,6 +20,19 @@ resource "aws_security_group" "rds_sg" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [var.dms_sg_id] # DMS 모듈에서 넘어온 SG ID
+  }
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [var.bridge_sg_id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

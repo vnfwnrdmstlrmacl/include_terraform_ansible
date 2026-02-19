@@ -10,3 +10,7 @@ output "dms_instance_private_ip" {
 output "dms_vpc_cidr" {
   value = var.vpc_cidr # 부모 모듈에서 넘겨받는 vpc_cidr가 있다면 활용
 }
+# [추가] DMS 보안 그룹 ID - RDS와 Bridge SG 설정에서 참조할 때 사용
+output "dms_sg_id" {
+  value = aws_security_group.dms_sg.id
+}
