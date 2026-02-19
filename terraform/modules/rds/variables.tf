@@ -40,3 +40,7 @@ variable "dms_sg_id" {
   description = "The security group ID of the DMS replication instance"
   type        = string
 }
+variable "bridge_sg_id" {
+  description = "The security group ID of the Tailscale bridge"
+  type        = string
+}

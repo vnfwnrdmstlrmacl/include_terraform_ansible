@@ -125,6 +125,8 @@
     name: "{{ patroni_replication_user }}"
     password: "{{ patroni_replication_password }}"
     role_attr_flags: "REPLICATION,LOGIN"
+    login_host: "localhost"
+    login_user: "postgres"
   become: yes
   become_user: postgres
   # Patroni가 DB를 기동한 후, 실제 Leader인 db-a에서만 실행

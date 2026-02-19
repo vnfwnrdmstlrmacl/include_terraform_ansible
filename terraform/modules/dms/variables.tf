@@ -32,3 +32,7 @@ variable "dms_instance_class" {
   type        = string
   default     = "dms.t3.medium"
 }
+variable "vpc_cidr" {
+  description = "VPC CIDR block"
+  type        = string
+}

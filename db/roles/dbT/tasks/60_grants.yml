@@ -1,5 +1,41 @@
 # roles/dbT/tasks/60_grants.yml
 ---
+- name: Ensure replication_user exists for DMS and Patroni
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "replication_user"
+    password: "{{ patroni_replication_password }}" # group_vars 등에 정의된 변수 확인 필수
+    role_attr_flags: "REPLICATION,LOGIN"
+    # 아까 발생한 소켓 에러 방지를 위해 login_host 추가
+    login_host: "localhost"
+    state: present
+  when: patroni_is_primary | bool
+
+- name: Grant CONNECT on appdb to replication_user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    db: "{{ app_db_name }}"
+    role: "replication_user"
+    objs: "{{ app_db_name }}"
+    type: "database"
+    privs: "CONNECT"
+    login_host: "localhost"
+  when: patroni_is_primary | bool
+
+- name: Grant SELECT on ALL tables for DMS migration
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    db: "{{ app_db_name }}"
+    role: "replication_user"
+    schema: "public" # 혹은 데이터가 있는 스키마명
+    objs: "ALL_IN_SCHEMA"
+    type: "table"
+    privs: "SELECT"
+    login_host: "localhost"
+  when: patroni_is_primary | bool
 # 목적:
 # - 권한/ROLE 관련 작업은 반드시 Primary(Leader)에서만 수행
 # - Replica에서 DDL/GRANT/ROLE 생성 시도하면 read-only/복제 정책으로 장애 유발 가능

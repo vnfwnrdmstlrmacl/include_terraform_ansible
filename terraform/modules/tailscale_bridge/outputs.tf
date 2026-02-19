@@ -1,4 +1,8 @@
 # modules/tailscale_bridge/outputs.tf
+output "bridge_sg_id" {
+  description = "The security group ID of the Tailscale bridge instance"
+  value       = aws_security_group.ts_bridge_sg.id
+}
 
 output "private_ip" {
   description = "Tailscale Bridge EC2의 사설 IP"

@@ -1,3 +1,7 @@
+variable "dms_sg_id" {
+  description = "The security group ID of the DMS replication instance"
+  type        = string
+}
 variable "project_name" {
   description = "프로젝트 이름 접두어"
   type        = string
