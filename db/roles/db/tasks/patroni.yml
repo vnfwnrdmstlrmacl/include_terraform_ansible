@@ -112,4 +112,20 @@
   when:
     - inventory_hostname in ['db-a', 'db-s']
     - patroni_active.stdout != "active"
-
+- name: Fail if patroni is not active (db-a, db-s only)
+  ansible.builtin.fail:
+    msg: |
+      Patroni is not active on {{ inventory_hostname }}.
+      ...
+  when:
+    - inventory_hostname in ['db-a', 'db-s']
+    - patroni_active.stdout != "active"
+- name: Create replication user for Patroni (Run on Leader only)
+  community.postgresql.postgresql_user:
+    name: "{{ patroni_replication_user }}"
+    password: "{{ patroni_replication_password }}"
+    role_attr_flags: "REPLICATION,LOGIN"
+  become: yes
+  become_user: postgres
+  # Patroni가 DB를 기동한 후, 실제 Leader인 db-a에서만 실행
+  when: inventory_hostname == 'db-a'
