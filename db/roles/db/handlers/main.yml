@@ -1,5 +1,17 @@
 ---
+# handlers/main.yml
 
+- name: Reload patroni via REST
+  ansible.builtin.uri:
+    url: "http://localhost:8008/reload"
+    method: POST
+    status_code: 200
+  listen: "Reload patroni via REST"
+
+- name: restart postgresql
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
 - name: reload systemd
   ansible.builtin.systemd:
     daemon_reload: true

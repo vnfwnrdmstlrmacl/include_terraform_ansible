@@ -16,7 +16,7 @@ db_vault_vars_file: "{{ playbook_dir }}/group_vars/db/vault.yml"
 # -----------------------------
 db_subnet_cidr: "10.2.3.0/24"
 db_gateway_vip: "10.2.3.254"
-
+dms_instance_ip: "10.2.11.182"
 # (서비스/프록시 등 외부(내부서비스) 대역)
 svc_subnet_cidr: "10.2.2.0/24"
 svc_vip: "10.2.2.254"
