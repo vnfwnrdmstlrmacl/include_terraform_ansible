@@ -1,0 +1,76 @@
+# roles/dbT/tasks/60_grants.yml
+---
+# 목적:
+# - 권한/ROLE 관련 작업은 반드시 Primary(Leader)에서만 수행
+# - Replica에서 DDL/GRANT/ROLE 생성 시도하면 read-only/복제 정책으로 장애 유발 가능
+# - DB 접속은 로컬 소켓(=become_user=postgres)로 통일 (127.0.0.1/패스워드 의존 제거)
+
+- name: Ensure svc_api role exists (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ svc_api_role }}"
+    password: "{{ svc_api_password }}"
+    encrypted: true
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOINHERIT,LOGIN"
+    state: present
+  when: patroni_is_primary | bool
+
+- name: Grant USAGE on schema to svc_api (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: "GRANT USAGE ON SCHEMA {{ api_schema }} TO {{ svc_api_role }};"
+  when: patroni_is_primary | bool
+
+- name: Grant table privileges to svc_api (SELECT/INSERT/UPDATE) (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        {{ api_schema }}.weather_mid_temp,
+        {{ api_schema }}.weather_mid_land,
+        {{ api_schema }}.energy_kepco_monthly,
+        {{ api_schema }}.energy_gas
+      TO {{ svc_api_role }};
+  when: patroni_is_primary | bool
+
+- name: Grant sequence privileges to svc_api (USAGE/SELECT) (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT USAGE, SELECT ON SEQUENCE
+        {{ api_schema }}.weather_mid_temp_id_seq,
+        {{ api_schema }}.weather_mid_land_id_seq,
+        {{ api_schema }}.energy_kepco_monthly_id_seq,
+        {{ api_schema }}.energy_gas_id_seq
+      TO {{ svc_api_role }};
+  when: patroni_is_primary | bool
+
+- name: Grant USAGE on api schema to api_app (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: "GRANT USAGE ON SCHEMA {{ api_schema }} TO {{ api_db_user }};"
+  when: patroni_is_primary | bool
+
+- name: Grant SELECT on api tables to api_app (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT SELECT ON TABLE
+        {{ api_schema }}.weather_mid_temp,
+        {{ api_schema }}.weather_mid_land,
+        {{ api_schema }}.energy_kepco_monthly,
+        {{ api_schema }}.energy_gas
+      TO {{ api_db_user }};
+  when: patroni_is_primary | bool
+

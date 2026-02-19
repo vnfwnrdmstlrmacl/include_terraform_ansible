@@ -1,0 +1,41 @@
+global
+    daemon
+    maxconn 4096
+    log /dev/log local0
+
+defaults
+    mode tcp
+    log global
+    option tcplog
+    timeout connect 5s
+    timeout client  1m
+    timeout server  1m
+
+frontend fe_pg
+    # VIP(10.2.2.254)가 MASTER에만 존재하는 구조에서,
+    # 특정 IP로 bind 하면 BACKUP 또는 VIP 미할당 시점에 HAProxy 기동 자체가 실패함.
+    # 따라서 모든 노드에서 항상 기동 가능하도록 포트만 bind 한다.
+    bind :{{ haproxy_listen_port }}
+    default_backend be_pg_primary
+
+backend be_pg_primary
+    balance first
+    option tcp-check
+
+    # ------------------------------------------------------------
+    # Patroni REST(/master)로 primary 여부 확인
+    # - Primary: /master -> 200 OK
+    # - Replica: /master -> 503 (또는 non-200)
+    # ------------------------------------------------------------
+    tcp-check connect port {{ patroni_rest_port }}
+    tcp-check send "GET {{ patroni_master_path | default('/master') }} HTTP/1.1\r\nHost: {{ proxy_check_host | default('localhost') }}\r\nConnection: close\r\n\r\n"
+    tcp-check expect rstring "200 OK"
+
+{% for n in db_nodes %}
+{% if (n.role is defined and n.role == 'backup') or (n.patroni_enabled is defined and (not n.patroni_enabled)) %}
+    # skip {{ n.name }} (backup/non-patroni)
+{% else %}
+    server {{ n.name }} {{ n.host }}:{{ n.pg_port | default(5432) }} check port {{ n.patroni_port | default(patroni_rest_port) }} inter 2s fall 2 rise 2
+{% endif %}
+{% endfor %}
+

@@ -1,0 +1,83 @@
+---
+- name: Install required packages (iptables-services)
+  ansible.builtin.dnf:
+    name:
+      - iptables-services
+      - iptables
+    state: present
+  when: proxy_nat_use_iptables_services | bool
+
+# firewalld와 iptables-services는 같이 쓰면 충돌 나는 경우가 많음
+- name: Stop/disable/mask firewalld on proxy
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+
+- name: Enable IPv4 forwarding (runtime + persistent)
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: true
+
+# 멀티 NIC 라우터에서 rp_filter가 역경로 차단을 일으킬 수 있음
+- name: Disable rp_filter (avoid asymmetric routing drops)
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "0"
+    state: present
+    reload: true
+  loop:
+    - net.ipv4.conf.all.rp_filter
+    - net.ipv4.conf.default.rp_filter
+    - "net.ipv4.conf.{{ proxy_external_iface }}.rp_filter"
+    - "net.ipv4.conf.{{ proxy_internal_iface }}.rp_filter"
+
+# --------------------------------------------------------------------
+# [핵심] DB subnet(10.2.3.0/24) <-> Storage subnet(10.2.2.0/24)
+# - 지금 dbb(10.2.3.4)에서 storageVM(10.2.2.30)로 ping/2049/111 모두 FAIL
+# - 원인: Proxy에서 FORWARD 차단 또는 역방향 라우팅 부재
+# - 해결: (1) FORWARD 허용 (2) DB->Storage 방향 SNAT(MASQUERADE)
+# --------------------------------------------------------------------
+- name: Ensure forwarding is allowed between DB and Storage subnets (kernel rules)
+  ansible.builtin.shell: |
+    set -e
+    iptables -C FORWARD -s 10.2.3.0/24 -d 10.2.2.0/24 -j ACCEPT 2>/dev/null || \
+      iptables -A FORWARD -s 10.2.3.0/24 -d 10.2.2.0/24 -j ACCEPT
+    iptables -C FORWARD -s 10.2.2.0/24 -d 10.2.3.0/24 -j ACCEPT 2>/dev/null || \
+      iptables -A FORWARD -s 10.2.2.0/24 -d 10.2.3.0/24 -j ACCEPT
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: proxy_nat_use_iptables_services | bool
+
+- name: Ensure SNAT (MASQUERADE) for DB -> Storage traffic (kernel rules)
+  ansible.builtin.shell: |
+    set -e
+    iptables -t nat -C POSTROUTING -s 10.2.3.0/24 -d 10.2.2.0/24 -j MASQUERADE 2>/dev/null || \
+      iptables -t nat -A POSTROUTING -s 10.2.3.0/24 -d 10.2.2.0/24 -j MASQUERADE
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: proxy_nat_use_iptables_services | bool
+
+# (선택) 기존 템플릿 기반 영구 룰 배포
+- name: Deploy /etc/sysconfig/iptables from template
+  ansible.builtin.template:
+    src: iptables.j2
+    dest: /etc/sysconfig/iptables
+    owner: root
+    group: root
+    mode: "0600"
+  when: proxy_nat_use_iptables_services | bool
+  notify: restart iptables
+
+- name: Ensure iptables service enabled and started
+  ansible.builtin.service:
+    name: iptables
+    state: started
+    enabled: true
+  when: proxy_nat_use_iptables_services | bool

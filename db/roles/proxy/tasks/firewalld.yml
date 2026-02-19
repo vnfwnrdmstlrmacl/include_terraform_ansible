@@ -1,0 +1,51 @@
+---
+# roles/proxy/tasks/firewall.yml
+# Proxy 전용 방화벽 설정
+# - firewalld 완전 비활성화
+# - iptables-services 단독 사용
+
+- name: Ensure iptables packages are installed (proxy)
+  ansible.builtin.dnf:
+    name:
+      - iptables
+      - iptables-services
+    state: present
+
+# firewalld는 존재하든 말든 무조건 죽이고 mask
+- name: Stop, disable and mask firewalld (proxy)
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+
+# iptables rules 배포
+- name: Deploy iptables rules file (proxy)
+  ansible.builtin.template:
+    src: iptables.j2
+    dest: /etc/sysconfig/iptables
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart iptables
+
+# iptables 서비스 활성화
+- name: Enable and start iptables service (proxy)
+  ansible.builtin.systemd:
+    name: iptables
+    state: started
+    enabled: true
+
+# 실제로 룰이 올라갔는지 검증 (여기서 실패하면 바로 알 수 있게)
+- name: Verify FORWARD chain is not empty (proxy)
+  ansible.builtin.command: iptables -S FORWARD
+  register: ipt_forward
+  changed_when: false
+
+- name: Fail if iptables FORWARD chain has no rules
+  ansible.builtin.fail:
+    msg: >
+      iptables rules are NOT loaded on proxy.
+      firewalld may still be interfering or iptables.service failed.
+  when: ipt_forward.stdout_lines is not defined or (ipt_forward.stdout_lines | length) < 2

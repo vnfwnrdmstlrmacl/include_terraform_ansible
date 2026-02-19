@@ -1,0 +1,90 @@
+---
+# roles/dbT/tasks/55_oauth_tables.yml
+# "새로 시작" 전용: 기존 테이블 있으면 다 DROP 하고 다시 CREATE
+# - users: 통합 테이블 (로컬 username/password_hash + OAuth 연동)
+# - oauth_accounts / oauth_tokens 생성
+# - Primary(Leader)에서만 실행
+
+- name: dbT - Reset OAuth/User tables (DROP & recreate)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      -- 🔥 새로 시작: 기존 것 싹 삭제 (의존성 포함)
+      DROP TABLE IF EXISTS {{ app_schema }}.oauth_tokens CASCADE;
+      DROP TABLE IF EXISTS {{ app_schema }}.oauth_accounts CASCADE;
+      DROP TABLE IF EXISTS {{ app_schema }}.chat_logs CASCADE;
+      DROP TABLE IF EXISTS {{ app_schema }}.users CASCADE;
+
+      -- 확장
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+      -- ✅ users (통합)
+      CREATE TABLE {{ app_schema }}.users (
+        user_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+        -- 공통
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        status text NOT NULL DEFAULT 'active',
+        role text NOT NULL DEFAULT 'ROLE_USER',
+
+        -- 로컬 회원가입 (OAuth-only 유저는 NULL 가능)
+        username varchar(50),
+        password_hash varchar(255),
+
+        -- 프로필/연동용
+        email text,
+        display_name text
+      );
+
+      -- username은 값 있을 때만 유니크
+      CREATE UNIQUE INDEX uq_users_username
+        ON {{ app_schema }}.users(username)
+        WHERE username IS NOT NULL;
+
+      CREATE INDEX idx_users_email
+        ON {{ app_schema }}.users(email);
+
+      -- ✅ oauth_accounts
+      CREATE TABLE {{ app_schema }}.oauth_accounts (
+        oauth_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES {{ app_schema }}.users(user_id) ON DELETE CASCADE,
+
+        provider text NOT NULL,           -- google/kakao/naver
+        provider_user_id text NOT NULL,   -- provider 고유 유저 ID
+        profile_image_url text,
+
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+
+        UNIQUE(provider, provider_user_id),
+        UNIQUE(user_id, provider)
+      );
+
+      CREATE INDEX idx_oauth_accounts_user_id
+        ON {{ app_schema }}.oauth_accounts(user_id);
+
+      CREATE INDEX idx_oauth_accounts_provider
+        ON {{ app_schema }}.oauth_accounts(provider);
+
+      -- ✅ oauth_tokens
+      CREATE TABLE {{ app_schema }}.oauth_tokens (
+        token_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        oauth_id uuid NOT NULL REFERENCES {{ app_schema }}.oauth_accounts(oauth_id) ON DELETE CASCADE,
+
+        refresh_token text,
+        expires_at timestamptz,
+        scope text,
+
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE INDEX idx_oauth_tokens_oauth_id
+        ON {{ app_schema }}.oauth_tokens(oauth_id);
+
+      CREATE INDEX idx_oauth_tokens_expires_at
+        ON {{ app_schema }}.oauth_tokens(expires_at);
+  when: patroni_is_primary | bool

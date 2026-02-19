@@ -1,0 +1,86 @@
+---
+# roles/etcd/tasks/firewalld.yml
+# etcd 클러스터 통신(2379/2380) 방화벽 오픈
+# - 2379/tcp: client (etcdctl/Patroni 등)
+# - 2380/tcp: peer (raft)
+#
+# 현재 로그에서 2380 "no route to host / i/o timeout"이 반복되므로,
+# 최소한 etcd 노드 간 2380/tcp가 확실히 열려야 함.
+
+- name: Ensure firewalld is installed
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+
+- name: Ensure firewalld is running and enabled
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+
+- name: Detect default firewalld zone
+  ansible.builtin.command: firewall-cmd --get-default-zone
+  register: fw_default_zone
+  changed_when: false
+
+# ------------------------------
+# (권장) etcd 대역을 해당 zone에 "source"로 추가
+# - 인터페이스/zone 설계가 복잡할 때, 최소한 10.2.3.0/24 트래픽을 신뢰 zone으로 넣는 효과
+# - 이미 다른 방식으로 zone을 운영 중이면 이 소스 추가는 제거해도 됨
+# ------------------------------
+- name: Add etcd cluster CIDR to default zone sources (permanent)
+  ansible.builtin.command: >
+    firewall-cmd --permanent --zone={{ fw_default_zone.stdout }} --add-source={{ etcd_cluster_cidr }}
+  register: add_source_res
+  changed_when: "'success' in add_source_res.stdout"
+  failed_when: false
+
+# ------------------------------
+# etcd client/peer 포트 오픈
+# ------------------------------
+- name: Allow etcd client port (2379/tcp)
+  ansible.posix.firewalld:
+    zone: "{{ fw_default_zone.stdout }}"
+    port: "{{ etcd_client_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow etcd peer port (2380/tcp)
+  ansible.posix.firewalld:
+    zone: "{{ fw_default_zone.stdout }}"
+    port: "{{ etcd_peer_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+# ------------------------------
+# (선택) ICMP 허용(노드간 ping으로 기본 연결 확인용)
+# - 보안정책상 ping 막는 환경이면 제거 가능
+# ------------------------------
+- name: Allow ICMP echo-request (optional)
+  ansible.builtin.command: >
+    firewall-cmd --permanent --zone={{ fw_default_zone.stdout }} --add-icmp-block-inversion
+  register: icmp_opt
+  changed_when: false
+  failed_when: false
+
+# ------------------------------
+# 리로드(혹시 immediate가 적용 안되는 케이스 대비)
+# ------------------------------
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  changed_when: false
+
+# ------------------------------
+# 검증 출력 (디버깅용)
+# ------------------------------
+- name: Show firewalld zone config (debug)
+  ansible.builtin.command: firewall-cmd --zone={{ fw_default_zone.stdout }} --list-all
+  register: fw_list_all
+  changed_when: false
+
+- name: Print firewalld zone config
+  ansible.builtin.debug:
+    var: fw_list_all.stdout
+

@@ -1,0 +1,32 @@
+---
+# Patroni REST API로 role 확인 (psql 불필요)
+# - /role 응답 JSON의 "role" 값이 "primary"면 primary
+# - DB-A에서 확인한 것처럼 127.0.0.1:8008은 리슨하지 않을 수 있으므로
+#   항상 ansible_host(IP)로 호출한다.
+
+- name: Check Patroni role via REST API (/role)
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}:8008/role"
+    method: GET
+    return_content: true
+    status_code: 200
+    timeout: 2
+  register: patroni_role
+  changed_when: false
+  failed_when: false
+
+- name: Set patroni_is_primary fact
+  ansible.builtin.set_fact:
+    patroni_is_primary: "{{ (patroni_role.json.role | default('')) == 'primary' }}"
+    patroni_http_status: "{{ patroni_role.status | default(-1) }}"
+    patroni_detected_role: "{{ patroni_role.json.role | default('unknown') }}"
+
+- name: Debug primary detection
+  ansible.builtin.debug:
+    msg:
+      - "Host={{ inventory_hostname }}"
+      - "ansible_host={{ hostvars[inventory_hostname].ansible_host | default('N/A') }}"
+      - "patroni_is_primary={{ patroni_is_primary }}"
+      - "HTTP_status={{ patroni_http_status }}"
+      - "detected_role={{ patroni_detected_role }}"
+

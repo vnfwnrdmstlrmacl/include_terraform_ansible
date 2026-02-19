@@ -1,0 +1,28 @@
+---
+# roles/proxy/tasks/main.yml
+- import_tasks: disable_ipv6.yml
+# 0) 변수 검증을 가장 먼저 (중간에 꼬이지 않게)
+- name: Validate required variables
+  ansible.builtin.import_tasks: validate.yml
+
+# 1) 패키지 설치
+- name: Install packages
+  ansible.builtin.import_tasks: packages.yml
+
+# 2) 방화벽/iptables 정책을 먼저 확정
+#    - firewalld disable + mask
+#    - iptables-services enable + rules load
+- name: Configure firewall with iptables-services (disable firewalld)
+  ansible.builtin.import_tasks: iptables.yml
+- import_tasks: firewalld.yml
+# 3) 라우팅/포워딩 커널 설정(ip_forward 등)
+- name: Configure routing (ip_forward) and forwarding policy
+  ansible.builtin.import_tasks: routing.yml
+
+# 4) VIP 먼저
+- name: Configure Keepalived (Dual VIP failover)
+  ansible.builtin.import_tasks: keepalived.yml
+
+# 5) VIP 이후
+- name: Configure HAProxy (PostgreSQL L4 + Patroni master check)
+  ansible.builtin.import_tasks: haproxy.yml

@@ -1,0 +1,14 @@
+---
+# roles/dbT/tasks/40_schema.yml
+
+- name: Create schema (owned by patroni superuser)
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    login_host: 127.0.0.1
+    port: "{{ pg_port }}"
+    login_user: "{{ patroni_superuser }}"
+    login_password: "{{ patroni_superuser_password }}"
+    query: |
+      CREATE SCHEMA IF NOT EXISTS {{ app_schema }};
+  when: patroni_is_primary | bool
+

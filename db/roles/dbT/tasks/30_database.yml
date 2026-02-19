@@ -1,0 +1,14 @@
+---
+# roles/dbT/tasks/30_database.yml
+
+- name: Create application database
+  community.postgresql.postgresql_db:
+    name: "{{ app_db_name }}"
+    encoding: UTF8
+    state: present
+    login_host: 127.0.0.1
+    port: "{{ pg_port }}"
+    login_user: "{{ patroni_superuser }}"
+    login_password: "{{ patroni_superuser_password }}"
+  when: patroni_is_primary | bool
+

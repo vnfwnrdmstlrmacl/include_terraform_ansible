@@ -1,0 +1,20 @@
+---
+# roles/dbT/tasks/20_api_role.yml
+
+- name: Create API role "{{ api_db_user }}" if not exists
+  community.postgresql.postgresql_query:
+    db: postgres
+    login_host: 127.0.0.1
+    port: "{{ pg_port }}"
+    login_user: "{{ patroni_superuser }}"
+    login_password: "{{ patroni_superuser_password }}"
+    query: |
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{{ api_db_user }}') THEN
+          CREATE ROLE {{ api_db_user }} LOGIN PASSWORD '{{ api_db_password }}';
+        END IF;
+      END
+      $$;
+  when: patroni_is_primary | bool
+

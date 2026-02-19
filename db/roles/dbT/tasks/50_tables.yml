@@ -1,0 +1,85 @@
+---
+# roles/dbT/tasks/50_tables.yml
+# 목적:
+# - api 스키마 + 적재 테이블(weather/energy)
+# - chat_logs 테이블
+# 주의:
+# - 반드시 Primary에서만 실행 (Replica에서 DDL 금지)
+# - DB 접속은 become_user=postgres + local socket 기준 (login_host/port 불필요)
+
+- name: dbT - Ensure API schema exists
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      CREATE SCHEMA IF NOT EXISTS {{ api_schema }};
+  when: patroni_is_primary | bool
+
+- name: dbT - Create API ingestion tables (DDL only)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ api_schema }}.weather_mid_temp (
+        id BIGSERIAL PRIMARY KEY,
+        reg_id TEXT,
+        base_date DATE,
+        tm_fc TEXT,
+        data JSONB,
+        created_at TIMESTAMP DEFAULT now(),
+        CONSTRAINT weather_mid_temp_reg_tmfc_uk UNIQUE (reg_id, tm_fc)
+      );
+
+      CREATE TABLE IF NOT EXISTS {{ api_schema }}.weather_mid_land (
+        id BIGSERIAL PRIMARY KEY,
+        reg_id TEXT,
+        base_date DATE,
+        tm_fc TEXT,
+        data JSONB,
+        created_at TIMESTAMP DEFAULT now(),
+        CONSTRAINT weather_mid_land_reg_tmfc_uk UNIQUE (reg_id, tm_fc)
+      );
+
+      CREATE TABLE IF NOT EXISTS {{ api_schema }}.energy_kepco_monthly (
+        id BIGSERIAL PRIMARY KEY,
+        region_code TEXT,
+        ym CHAR(6),
+        data JSONB,
+        created_at TIMESTAMP DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS {{ api_schema }}.energy_gas (
+        id BIGSERIAL PRIMARY KEY,
+        region_code TEXT,
+        year CHAR(4),
+        data JSONB,
+        created_at TIMESTAMP DEFAULT now()
+      );
+  when: patroni_is_primary | bool
+
+- name: dbT - Create chat_logs table (FK -> app.users.user_id UUID)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ app_schema }}.chat_logs (
+        id BIGSERIAL PRIMARY KEY,
+        user_id uuid REFERENCES {{ app_schema }}.users(user_id) ON DELETE CASCADE,
+        category VARCHAR(20) NOT NULL,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS chat_logs_user_id_idx
+        ON {{ app_schema }}.chat_logs(user_id);
+
+      CREATE INDEX IF NOT EXISTS chat_logs_category_idx
+        ON {{ app_schema }}.chat_logs(category);
+
+      CREATE INDEX IF NOT EXISTS chat_logs_created_at_idx
+        ON {{ app_schema }}.chat_logs(created_at);
+  when: patroni_is_primary | bool

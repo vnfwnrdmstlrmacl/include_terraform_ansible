@@ -1,0 +1,16 @@
+---
+- name: Tailscale 리포지토리 추가 (CentOS/RHEL)
+  shell: "curl -fsSL https://tailscale.com/install.sh | sh"
+  args:
+    creates: /usr/bin/tailscale
+
+- name: IP 포워딩 활성화 (리눅스 라우터 설정)
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1 : true'
+    state: present
+    reload: yes
+# /root/ansible/db/roles/tailscale_setup/tasks/main.yml
+# roles/tailscale_setup/tasks/main.yml
+- name: Tailscale 서비스 시작 및 로그인
+  shell: "tailscale up --authkey={{ auth_key }} --advertise-routes={{ internal_route }} --accept-dns=false"

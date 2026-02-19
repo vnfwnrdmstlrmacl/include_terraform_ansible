@@ -1,0 +1,23 @@
+---
+# ----------------------------------------------------------
+# roles/proxy/tasks/delete.yml
+# - Provisioning(다운로드/설치) 다 끝난 뒤에만 실행할 “후처리”
+# - mangle/FORWARD의 TCPMSS clamp 룰 1개 제거
+# - 룰이 없으면 조용히 통과(멱등)
+# - 제거 후 iptables-save로 영구 반영
+# ----------------------------------------------------------
+
+- name: Remove TCPMSS clamp rule (mangle/FORWARD) after provisioning
+  become: true
+  ansible.builtin.shell: |
+    set -euo pipefail
+
+    if iptables -t mangle -C FORWARD -i {{ proxy_internal_iface }} -o {{ proxy_external_iface }} \
+        -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; then
+      iptables -t mangle -D FORWARD -i {{ proxy_internal_iface }} -o {{ proxy_external_iface }} \
+        -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+    fi
+
+    iptables-save > /etc/sysconfig/iptables
+  args:
+    executable: /bin/bash

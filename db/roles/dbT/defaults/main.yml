@@ -1,0 +1,5 @@
+---
+# defaults file for roles/dbT
+patroni_service_name: "patroni"
+postgres_admin_user: "postgres"
+

@@ -1,0 +1,39 @@
+---
+
+
+###############################################################################
+# 4. Backup node / storage
+###############################################################################
+
+###############################################################################
+- name: Build DB Backup
+  hosts: db_cluster
+  serial: 1
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Load DB non-secret vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/backup/main.yml"
+
+    - name: Load DB secret vars (vault)
+      ansible.builtin.include_vars:
+        file: "{{ vault_key }}"
+
+    - name: Load DB secret vars (vault)
+      ansible.builtin.include_vars:
+        file: "{{ terraform_key }}"
+
+  roles:
+    - backup
+
+  tags: ['backup']
+
+
+
+
+
+
+  tags: ['dbT']
+

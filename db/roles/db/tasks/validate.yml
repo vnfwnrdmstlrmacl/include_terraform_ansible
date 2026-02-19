@@ -1,0 +1,84 @@
+---
+# ============================================================
+# roles/db/tasks/validate.yml
+# DB 전용 검증 (etcd 관련 제거 완료)
+# ============================================================
+
+- name: Show host / IP (debug)
+  ansible.builtin.debug:
+    msg:
+      - "inventory_hostname={{ inventory_hostname }}"
+      - "ansible_host={{ ansible_host | default('N/A') }}"
+      - "groups={{ group_names }}"
+
+# -----------------------------
+# PostgreSQL/Patroni 프로세스/포트 확인
+# -----------------------------
+- name: Check listening ports (5432/8008)
+  ansible.builtin.shell: |
+    set -e
+    ss -lntp | egrep ':(5432|8008)\b' || true
+  args:
+    executable: /bin/bash
+  register: _ports
+  changed_when: false
+  when: "'db' in group_names"
+
+- name: Print port check result
+  ansible.builtin.debug:
+    var: _ports.stdout
+  when: "'db' in group_names"
+
+- name: Check patroni service status (if installed)
+  ansible.builtin.shell: |
+    set -e
+    systemctl is-enabled patroni 2>/dev/null || true
+    systemctl is-active patroni 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: _patroni_status
+  changed_when: false
+  when: "'db' in group_names"
+
+- name: Print patroni service status
+  ansible.builtin.debug:
+    var: _patroni_status.stdout
+  when: "'db' in group_names"
+
+# -----------------------------
+# Patroni REST Health (로컬)
+# -----------------------------
+- name: Patroni REST - local health check (curl localhost)
+  ansible.builtin.shell: |
+    set -e
+    curl -sS --max-time 3 http://127.0.0.1:{{ patroni_rest_port }}/health || true
+  args:
+    executable: /bin/bash
+  register: _patroni_health
+  changed_when: false
+  when: "'db' in group_names"
+
+- name: Print Patroni health response
+  ansible.builtin.debug:
+    var: _patroni_health.stdout
+  when: "'db' in group_names"
+
+# -----------------------------
+# PostgreSQL 연결 테스트(로컬)
+# - 환경에 따라 postgres 유저/패스는 vault/pg_hba에 의해 막힐 수 있으니 "최소 확인"만
+# -----------------------------
+- name: Check PostgreSQL local readiness (pg_isready)
+  ansible.builtin.shell: |
+    set -e
+    command -v pg_isready >/dev/null 2>&1 && pg_isready -h 127.0.0.1 -p {{ pg_port }} || true
+  args:
+    executable: /bin/bash
+  register: _pg_ready
+  changed_when: false
+  when: "'db' in group_names"
+
+- name: Print pg_isready
+  ansible.builtin.debug:
+    var: _pg_ready.stdout
+  when: "'db' in group_names"
+

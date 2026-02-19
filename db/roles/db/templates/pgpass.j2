@@ -1,0 +1,2 @@
+# patroni.yml.j2와 변수명을 똑같이 맞춰야 합니다.
+{{ hostvars['db-a'].ansible_host }}:5432:*:{{ patroni_replication_user }}:{{ patroni_replication_password }}

@@ -1,0 +1,37 @@
+# roles/dbT/tasks/65_oauth_grants.yml
+---
+# 목적:
+# - OAuth/users 테이블에 대한 권한 부여는 반드시 Primary에서만 수행
+# - DB 접속은 로컬 소켓(=become_user=postgres)로 통일
+
+- name: Grant usage on schema to api role (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT USAGE ON SCHEMA {{ app_schema }} TO {{ api_db_user }};
+  when: patroni_is_primary | bool
+
+- name: Grant OAuth table privileges to api role (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+        {{ app_schema }}.users,
+        {{ app_schema }}.oauth_accounts,
+        {{ app_schema }}.oauth_tokens
+      TO {{ api_db_user }};
+  when: patroni_is_primary | bool
+
+- name: Ensure api role can use sequences (PRIMARY ONLY)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ app_db_name }}"
+    query: |
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {{ app_schema }} TO {{ api_db_user }};
+  when: patroni_is_primary | bool
+

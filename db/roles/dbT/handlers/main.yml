@@ -1,0 +1,11 @@
+---
+- name: Reload Patroni
+  ansible.builtin.service:
+    name: "{{ patroni_service_name }}"
+    state: reloaded
+
+- name: Restart Patroni
+  ansible.builtin.service:
+    name: "{{ patroni_service_name }}"
+    state: restarted
+

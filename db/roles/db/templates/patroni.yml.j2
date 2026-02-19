@@ -1,0 +1,81 @@
+# roles/db/templates/patroni.yml.j2
+
+scope: "{{ patroni_scope }}"
+namespace: "{{ patroni_namespace | default('/service/') }}"
+name: "{{ inventory_hostname }}"
+
+restapi:
+  listen: "{{ ansible_host }}:8008"
+  connect_address: "{{ ansible_host }}:8008"
+
+etcd3:
+  hosts:
+{% for h in etcd_endpoints %}
+    - "{{ h }}"
+{% endfor %}
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 256MB
+        # 중요: 비밀번호 저장 시 SCRAM 방식을 사용하도록 명시
+        password_encryption: "scram-sha-256"
+
+  initdb:
+    - encoding: UTF8
+    - locale: C
+
+  # ============================
+  # pg_hba는 여기(bootstrap)에서 관리해야 함
+  # 기존 하드코딩 블록을 변수 기반으로 교체
+  # ============================
+  pg_hba:
+{% for rule in patroni_pg_hba_rules %}
+    - "{{ rule }}"
+{% endfor %}
+
+  users:
+    {{ patroni_superuser }}:
+      password: "{{ patroni_superuser_password }}"
+      options:
+        - createrole
+        - createdb
+    {{ patroni_replication_user }}:
+      password: "{{ patroni_replication_password }}"
+      options:
+        - replication
+
+postgresql:
+  listen: "0.0.0.0:5432"
+  connect_address: "{{ ansible_host }}:5432"
+  data_dir: "{{ patroni_pg_data_dir }}"
+  bin_dir: "{{ patroni_pg_bin_dir }}"
+  authentication:
+    superuser:
+      username: "{{ patroni_superuser }}"
+      password: "{{ patroni_superuser_password }}"
+    replication:
+      username: "{{ patroni_replication_user }}"
+      password: "{{ patroni_replication_password }}"
+  parameters:
+    unix_socket_directories: "/var/run/postgresql"
+    # 하단 파라미터에도 추가하여 런타임 시 적용 보장
+    password_encryption: "scram-sha-256"
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+

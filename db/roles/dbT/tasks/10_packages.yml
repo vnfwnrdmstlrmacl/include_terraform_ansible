@@ -1,0 +1,9 @@
+---
+# roles/dbT/tasks/10_packages.yml
+
+- name: Install psycopg2 (PostgreSQL Python driver)
+  ansible.builtin.dnf:
+    name: python3-psycopg2
+    state: present
+  when: patroni_is_primary | bool
+

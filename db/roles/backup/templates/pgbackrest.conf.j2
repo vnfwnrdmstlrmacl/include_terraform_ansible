@@ -1,0 +1,22 @@
+[global]
+# S3 저장소 설정
+repo1-type=s3
+repo1-path=/pgbackrest
+repo1-s3-bucket={{ s3_bucket_name }}
+repo1-s3-endpoint=s3.{{ s3_region }}.amazonaws.com
+repo1-s3-region={{ s3_region }}
+# [보안 취약] 설정 파일에 S3 키가 노출되므로 파일 권한 0640 관리 필수
+repo1-s3-key={{ s3_access_key }}
+repo1-s3-key-secret={{ s3_secret_key }}
+
+# 백업 보관 정책
+repo1-retention-full={{ pgbackrest_retention_full }}
+repo1-retention-diff={{ pgbackrest_retention_diff }}
+
+# 로그 및 프로세스 설정
+log-level-file=detail
+log-path={{ pgbackrest_log_path }}
+process-max=2
+
+[{{ pgbackrest_stanza_name }}]
+pg1-path={{ pg_data_path }}

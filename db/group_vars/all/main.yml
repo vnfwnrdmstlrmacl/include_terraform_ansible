@@ -1,0 +1,11 @@
+# 공통 etcd endpoints (etcd 그룹 + db 그룹 모두가 필요)
+etcd_endpoints:
+  - "10.2.3.20:2379"
+  - "10.2.3.21:2379"
+  - "10.2.3.22:2379"
+
+# Patroni가 필요로 하는 형태(기존 호환 유지)
+patroni_etcd_endpoints: "10.2.3.20:2379,10.2.3.21:2379,10.2.3.22:2379"
+etcd:
+  hosts: "{{ patroni_etcd_endpoints }}"
+# /root/ansible/db/group_vars/all/main.yml

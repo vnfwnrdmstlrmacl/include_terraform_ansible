@@ -1,0 +1,87 @@
+---
+###############################################################################
+# 1. Proxy (HA / LB / Router)
+###############################################################################
+- name: Build Proxy (HA / LB / Router)
+  hosts: proxy
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Load proxy non-secret vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/proxy/main.yml"
+
+    - name: Load proxy secret vars (vault)
+      ansible.builtin.include_vars:
+        file: "{{ proxy_vault_vars_file }}"
+
+  roles:
+    - proxy
+
+  tags: ['proxy']
+
+
+
+###############################################################################
+# 2. etcd cluster
+###############################################################################
+- name: Build etcd cluster
+  hosts: etcd
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Load DB non-secret vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/etcd/main.yml"
+
+
+  roles : 
+    - etcd
+  tags: ['etcd']
+
+
+###############################################################################
+# 3. PostgreSQL / Patroni infra (최초 1회 or 장애 시만)
+###############################################################################
+- name: Build DB Infra (PostgreSQL / Patroni)
+  hosts: db_cluster
+  serial: 1
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Load DB non-secret vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/db/main.yml"
+
+    - name: Load DB secret vars (vault)
+      ansible.builtin.include_vars:
+        file: "{{ db_vault_vars_file }}"
+
+  roles:
+    - db
+
+  tags: ['db_infra']
+
+###############################################################################
+# 5. DB Objects (appdb / schema / tables / grants)
+###############################################################################
+- name: Build DB Objects (dbT)
+  hosts: db_cluster
+  gather_facts: false
+  become: true
+
+  pre_tasks:
+    - name: Load DB non-secret vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/db/main.yml"
+
+    - name: Load DB secret vars (vault)
+      ansible.builtin.include_vars:
+        file: "{{ db_vault_vars_file }}"
+
+  roles:
+    - dbT
+  tags: ['db_T']

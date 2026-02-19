@@ -1,0 +1,28 @@
+- import_tasks: 00_detect_patroni.yml
+
+- import_tasks: 10_packages.yml
+  when: patroni_is_primary | bool
+
+- import_tasks: 20_api_role.yml
+  when: patroni_is_primary | bool
+
+- import_tasks: 30_database.yml
+  when: patroni_is_primary | bool
+
+- import_tasks: 40_schema.yml
+  when: patroni_is_primary | bool
+
+
+- import_tasks: 55_oauth_tables.yml
+  when: patroni_is_primary | bool
+
+
+- import_tasks: 50_tables.yml
+  when: patroni_is_primary | bool
+
+
+- import_tasks: 60_grants.yml
+  when: patroni_is_primary | bool
+
+- import_tasks: 65_oauth_grants.yml
+  when: patroni_is_primary | bool

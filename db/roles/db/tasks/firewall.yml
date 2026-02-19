@@ -1,0 +1,43 @@
+---
+# ============================================================
+# DB 노드용 firewalld 완전 비활성화
+# - Patroni / PostgreSQL / etcd 통신 방해 제거 목적
+# - rich rules / zone / state 꼬임 방지
+# ============================================================
+
+- name: Stop firewalld immediately
+  ansible.builtin.service:
+    name: firewalld
+    state: stopped
+  ignore_errors: true
+
+- name: Disable firewalld permanently
+  ansible.builtin.service:
+    name: firewalld
+    enabled: false
+  ignore_errors: true
+
+- name: Mask firewalld to prevent restart
+  ansible.builtin.systemd:
+    name: firewalld
+    masked: true
+  ignore_errors: true
+
+- name: Verify firewalld is inactive
+  ansible.builtin.command: systemctl is-active firewalld
+  register: firewalld_active
+  changed_when: false
+  failed_when: false
+
+- name: Verify firewalld is disabled
+  ansible.builtin.command: systemctl is-enabled firewalld
+  register: firewalld_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Print firewalld status summary
+  ansible.builtin.debug:
+    msg:
+      - "firewalld active state  : {{ firewalld_active.stdout }}"
+      - "firewalld enabled state : {{ firewalld_enabled.stdout }}"
+

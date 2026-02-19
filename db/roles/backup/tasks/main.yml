@@ -1,0 +1,218 @@
+---
+##########################################################
+# roles/backup/tasks/main.yml (PATCHED - leader autodetect)
+##########################################################
+
+##########################################################
+# 0. 현재 Patroni Leader(Primary) 자동 감지
+# - 각 호스트에서 /role 조회 후,
+# - localhost(컨트롤러)에 leader hostname을 1개로 확정
+##########################################################
+
+- name: Detect Patroni role via REST API (/role)
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}:8008/role"
+    method: GET
+    return_content: true
+    status_code: 200
+    timeout: 2
+  register: patroni_role
+  changed_when: false
+  failed_when: false
+
+- name: Set patroni_is_primary fact
+  ansible.builtin.set_fact:
+    patroni_is_primary: "{{ (patroni_role.json.role | default('')) == 'primary' }}"
+
+# leader를 localhost에 저장 (run_once + loop)
+- name: Determine Patroni leader host (store on localhost)
+  ansible.builtin.set_fact:
+    patroni_leader_host: "{{ item }}"
+  when: hostvars[item].patroni_is_primary | default(false)
+  loop: "{{ ansible_play_hosts }}"
+  delegate_to: localhost
+  run_once: true
+
+# 모든 호스트에서 leader 값 참조 가능하게 복제
+- name: Propagate leader host fact to all hosts
+  ansible.builtin.set_fact:
+    patroni_leader_host: "{{ hostvars['localhost'].patroni_leader_host }}"
+  when: hostvars['localhost'].patroni_leader_host is defined
+
+- name: Fail if leader not detected
+  ansible.builtin.fail:
+    msg: "Could not detect Patroni leader via /role on any host in this play."
+  when: patroni_leader_host is not defined
+  run_once: true
+
+##########################################################
+# 1. 패키지 및 환경 준비 (모든 노드 공통)
+##########################################################
+- name: (RedHat 계열) EPEL 및 PostgreSQL 저장소 설치
+  ansible.builtin.dnf:
+    name:
+      - https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+      - "https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_os_family == "RedHat"
+
+- name: 필수 의존성 패키지 설치 (pgBackRest, jq, curl, acl)
+  ansible.builtin.package:
+    name: [pgbackrest, jq, curl, acl]
+    state: present
+
+- name: pgBackRest 디렉토리 생성 및 권한 설정
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0750'
+  loop:
+    - "{{ pgbackrest_log_path | default('/var/log/pgbackrest') }}"
+    - "/etc/pgbackrest"
+
+- name: pgbackrest.conf 템플릿 배포
+  ansible.builtin.template:
+    src: pgbackrest.conf.j2
+    dest: /etc/pgbackrest.conf
+    owner: postgres
+    group: postgres
+    mode: '0640'
+
+##########################################################
+# 2. Patroni DCS 설정 업데이트 (Leader에서 1회만)
+##########################################################
+- name: Create Patroni config patch file on leader (run once)
+  ansible.builtin.copy:
+    dest: /tmp/patroni_config_update.yml
+    content: |
+      postgresql:
+        parameters:
+          wal_level: logical
+          archive_mode: "on"
+          archive_command: "pgbackrest --stanza={{ pgbackrest_stanza_name }} archive-push %p"
+          max_wal_senders: 10
+          max_replication_slots: 10
+          hot_standby: "on"
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+- name: Apply Patroni DCS config on leader (run once)
+  ansible.builtin.shell: >
+    patronictl -c /etc/patroni.yml edit-config
+    --force
+    --apply /tmp/patroni_config_update.yml
+    {{ cluster_name | default('pg-ha') }}
+  become: yes
+  become_user: root
+  register: patroni_config_updated
+  failed_when: patroni_config_updated.rc != 0
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+##########################################################
+# 2-1. (선택) replication 유저 비번 변경 + pgpass 동기화
+# 기본 OFF: 실수로 비번 바꿔서 Replica 죽이는 사고 방지
+# - 켜려면: backup_rotate_replication_password: true
+##########################################################
+
+- name: Rotate replication user password to SCRAM on leader (OPTIONAL)
+  become: yes
+  become_user: postgres
+  ansible.builtin.shell: |
+    psql -v ON_ERROR_STOP=1 -c "SET password_encryption = 'scram-sha-256'; ALTER USER {{ patroni_replication_user }} WITH PASSWORD '{{ patroni_replication_password }}';"
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+  when:
+    - (backup_rotate_replication_password | default(false)) | bool
+    - patroni_config_updated.changed | default(false)
+
+# ✅ 핵심: 비번을 바꿨으면 pgpass도 전 노드 동기화해야 Replica가 안 죽음
+# 접속 대상 호스트는 "리더의 ansible_host"로 통일 (VIP 쓰는 구조면 여기만 VIP로 교체)
+- name: Sync /var/lib/pgsql/pgpass on all nodes (only when password rotated)
+  become: yes
+  become_user: root
+  ansible.builtin.copy:
+    dest: /var/lib/pgsql/pgpass
+    owner: postgres
+    group: postgres
+    mode: '0600'
+    content: |
+      {{ hostvars[patroni_leader_host].ansible_host | default(patroni_leader_host) }}:{{ pg_port | default('5432') }}:*:{{ patroni_replication_user }}:{{ patroni_replication_password }}
+  when:
+    - (backup_rotate_replication_password | default(false)) | bool
+    - patroni_config_updated.changed | default(false)
+
+- name: Remove Patroni temp patch file on leader (run once)
+  ansible.builtin.file:
+    path: /tmp/patroni_config_update.yml
+    state: absent
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+##########################################################
+# 3. Patroni 클러스터 재시작 (Leader에서 1회만)
+##########################################################
+- name: Restart Patroni cluster (run once on leader, only when config changed)
+  ansible.builtin.shell: "echo -e '\ny\n' | patronictl -c /etc/patroni.yml restart {{ cluster_name | default('pg-ha') }}"
+  become: yes
+  become_user: root
+  when: patroni_config_updated.changed | default(false)
+  register: patroni_restart_result
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+- name: Wait for DB to come up (run once)
+  ansible.builtin.pause:
+    seconds: 15
+  when: patroni_config_updated.changed | default(false)
+  run_once: true
+
+##########################################################
+# 4. pgBackRest Stanza 생성 및 검증 (Leader에서만)
+##########################################################
+- name: pgBackRest Stanza 생성 (Leader에서 1회)
+  become: yes
+  become_user: postgres
+  ansible.builtin.shell: "pgbackrest --stanza={{ pgbackrest_stanza_name }} stanza-create --log-level-console=info"
+  register: stanza_create_result
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+  failed_when:
+    - stanza_create_result.rc != 0
+    - "'already exists' not in (stanza_create_result.stderr | default(''))"
+
+- name: pgBackRest 설정 검증 (Leader에서 1회)
+  become: yes
+  become_user: postgres
+  ansible.builtin.shell: "pgbackrest --stanza={{ pgbackrest_stanza_name }} check"
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+- name: 최초 1회 Full Backup 수행 (Leader에서 1회)
+  become: yes
+  become_user: postgres
+  ansible.builtin.command: "pgbackrest --stanza={{ pgbackrest_stanza_name }} --type=full backup"
+  async: 3600
+  poll: 30
+  delegate_to: "{{ patroni_leader_host }}"
+  run_once: true
+
+##########################################################
+# 5. 백업 스케줄링 (모든 노드 공통)
+##########################################################
+- name: 백업 자동화 스케줄 등록 (Crontab)
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    user: "postgres"
+    job: "{{ item.job }} >> {{ pgbackrest_log_path | default('/var/log/pgbackrest') }}/backup-cron.log 2>&1"
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour }}"
+    weekday: "{{ item.weekday | default('*') }}"
+  loop:
+    - { name: "Weekly Full Backup",        job: "pgbackrest --stanza={{ pgbackrest_stanza_name }} --type=full backup", minute: "0",  hour: "0", weekday: "0" }
+    - { name: "Daily Differential Backup", job: "pgbackrest --stanza={{ pgbackrest_stanza_name }} --type=diff backup", minute: "0",  hour: "0", weekday: "1-6" }
+    - { name: "Hourly Incremental Backup", job: "pgbackrest --stanza={{ pgbackrest_stanza_name }} --type=incr backup", minute: "30", hour: "*", weekday: "*" }
+

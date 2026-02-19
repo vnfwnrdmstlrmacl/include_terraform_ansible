@@ -1,0 +1,50 @@
+---
+# group_vars/etcd/main.yml
+
+etcd_version: "v3.5.12"
+etcd_download_url: "https://storage.googleapis.com/etcd/{{ etcd_version }}/etcd-{{ etcd_version }}-linux-amd64.tar.gz"
+
+etcd_bin_dir: "/usr/local/bin"
+etcd_data_dir: "/var/lib/etcd"
+etcd_conf_dir: "/etc/etcd"
+
+etcd_client_port: 2379
+etcd_peer_port: 2380
+
+etcd_cluster_token: "etcd-ha"
+etcd_initial_cluster_state: "new"
+
+etcd_nodes:
+  - { name: "etcd-1", ip: "10.2.3.20" }
+  - { name: "etcd-2", ip: "10.2.3.21" }
+  - { name: "etcd-3", ip: "10.2.3.22" }
+
+etcd_initial_cluster: "etcd-1=http://10.2.3.20:2380,etcd-2=http://10.2.3.21:2380,etcd-3=http://10.2.3.22:2380"
+
+etcd_endpoints:
+  - "10.2.3.20:2379"
+  - "10.2.3.21:2379"
+  - "10.2.3.22:2379"
+
+etcd_bootstrap_reset: false
+etcd_healthcheck: true
+
+etcd_cluster_cidr: "10.2.3.0/24"
+
+etcd_fw_client_sources:
+  - "10.2.3.0/24"
+
+etcd_fw_peer_sources:
+  - "10.2.3.20/32"
+  - "10.2.3.21/32"
+  - "10.2.3.22/32"
+
+etcd_firewall_ports:
+  - desc: "etcd client"
+    port: "{{ etcd_client_port }}"
+    proto: "tcp"
+    sources: "{{ etcd_fw_client_sources }}"
+  - desc: "etcd peer"
+    port: "{{ etcd_peer_port }}"
+    proto: "tcp"
+    sources: "{{ etcd_fw_peer_sources }}"

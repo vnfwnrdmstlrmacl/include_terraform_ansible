@@ -1,0 +1,19 @@
+---
+# [보안 취약] S3 Access Key와 Secret Key는 일반 텍스트로 저장 시 노출 위험이 매우 큼.
+# 운영 시에는 'ansible-vault'를 사용하여 암호화하는 것을 강력히 권장합니다.
+
+vault_key: "{{ playbook_dir }}/group_vars/backup/vault.yml"
+terraform_key: "{{ playbook_dir }}/group_vars/backup/terraform.yml"
+
+s3_access_key: "{{ access_key }}" 
+s3_secret_key: "{{ secret_key }}"
+
+# PostgreSQL 13.23 관련 설정
+pg_version: "13"
+pg_data_path: "/var/lib/pgsql/patroni"
+pg_config_path: "/var/lib/pgsql/patroni"
+# pgBackRest 상세 설정
+pgbackrest_stanza_name: "main"
+pgbackrest_log_path: "/var/log/pgbackrest"
+pgbackrest_retention_full: 2  # 전체 백업 보관 개수
+pgbackrest_retention_diff: 2
