@@ -1,3 +1,4 @@
 roles/backup 전 모든 ansible은 site1.yml로 돌리고
 roles/backup 뒤 ansible은 site.yml로 돌리는데,
 roles/dbT site1.yml로 돌리기
+ansible-galaxy collection install amazon.aws 이거 다운받아야됨
