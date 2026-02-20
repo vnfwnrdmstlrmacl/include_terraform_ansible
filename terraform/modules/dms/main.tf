@@ -63,7 +63,6 @@ resource "aws_dms_endpoint" "target" {
 }
 
 # 6. [신규 추가] DMS 복제 태스크
-# 이 리소스가 있어야 실제로 데이터 복제가 시작됩니다.
 resource "aws_dms_replication_task" "main" {
   migration_type           = "full-load"
   replication_instance_arn = aws_dms_replication_instance.main.replication_instance_arn
@@ -73,17 +72,28 @@ resource "aws_dms_replication_task" "main" {
 
   # 소스(온프레)의 모든 테이블을 포함하는 매핑 설정
   table_mappings = jsonencode({
-    rules = [{
-      rule-type = "selection", rule-id = "1", rule-name = "1"
-      object-locator = { schema-name = "public", table-name = "%" }
-      rule-action = "include"
-    }]
+    rules = [
+      {
+        rule-type = "selection", rule-id = "1", rule-name = "include_api",
+        object-locator = { schema-name = "api", table-name = "%" },
+        rule-action = "include"
+      },
+      {
+        rule-type = "selection", rule-id = "2", rule-name = "include_app",
+        object-locator = { schema-name = "app", table-name = "%" },
+        rule-action = "include"
+      }
+    ]
   })
-
   replication_task_settings = jsonencode({
     TargetMetadata = {
-      # 온프레미스의 테이블 구조(Schema)를 RDS에 자동으로 생성합니다.
-      TargetTablePrepMode = "TRUNCATE_BEFORE_LOAD"
+      TargetTablePrepMode = "DROP_AND_CREATE" # 테이블 자동 생성 및 초기화
+      SupportLobs          = true
+      FullLobMode          = false
+      LobChunkSize         = 64
+    }
+    Logging = {
+      EnableLogging = true # CloudWatch 로그 활성화
     }
   })
 
