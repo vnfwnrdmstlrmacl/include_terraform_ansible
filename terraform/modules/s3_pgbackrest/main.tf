@@ -75,3 +75,7 @@ resource "aws_iam_user_policy_attachment" "attach" {
   user       = aws_iam_user.pgbackrest.name
   policy_arn = aws_iam_policy.pgbackrest_s3_policy.arn
 }
+resource "aws_s3_bucket" "pgbackrest_repo" {
+  bucket        = "test-pgbackrest-repo"
+  force_destroy = true  # 추가
+}
