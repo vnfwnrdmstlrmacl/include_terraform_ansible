@@ -69,5 +69,25 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# 1. Private Route Table 생성
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  # [핵심] 온프레미스(Tailscale) IP 대역에 대한 경로를 Bridge 인스턴스로 지정
+  # var.onprem_cidr은 보통 100.64.0.0/10 (Tailscale 기본) 혹은 실제 온프레 대역
+  route {
+    cidr_block           = "100.64.0.0/10"
+    network_interface_id = var.bridge_interface_id # Bridge 인스턴스의 ENI ID
+  }
+
+  tags = { Name = "${var.project_name}-private-rt" }
+}
+
+# 2. Private Subnet 연결
+resource "aws_route_table_association" "private" {
+  count          = 2
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
+}
 # (참고) Private Subnet용 NAT Gateway는 비용 절감을 위해 생략했습니다. 
 # 만약 Private 자원이 외부 패키지 업데이트 등이 필요하다면 추가가 필요합니다.

@@ -67,7 +67,7 @@ resource "aws_db_instance" "rds" {
   engine_version       = var.engine_version
   instance_class       = var.instance_class
   
-  db_name              = null
+  db_name              = "appdb"
   username             = "postgres"
   password             = var.db_password
   

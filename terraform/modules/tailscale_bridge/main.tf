@@ -61,6 +61,8 @@ resource "aws_instance" "bridge" {
               # Tailscale 실행 및 라우팅 광고
               # --advertise-routes: 온프레미스 서버가 이 VPC 대역을 찾아오게 하는 경로 설정
               sudo tailscale up --authkey=${var.tailscale_auth_key} --advertise-routes=${var.vpc_cidr} --accept-dns=false
+              sudo iptables -t nat -A POSTROUTING -o tailscale0 -j MASQUERADE
+
               EOF
 
   tags = {
