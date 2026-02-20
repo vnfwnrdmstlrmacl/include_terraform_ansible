@@ -3,6 +3,9 @@ output "bridge_sg_id" {
   description = "The security group ID of the Tailscale bridge instance"
   value       = aws_security_group.ts_bridge_sg.id
 }
+output "bridge_interface_id" {
+  value = aws_instance.bridge.primary_network_interface_id
+}
 
 output "private_ip" {
   description = "Tailscale Bridge EC2의 사설 IP"

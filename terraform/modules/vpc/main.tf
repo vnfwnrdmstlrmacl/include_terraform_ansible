@@ -75,10 +75,6 @@ resource "aws_route_table" "private" {
 
   # [핵심] 온프레미스(Tailscale) IP 대역에 대한 경로를 Bridge 인스턴스로 지정
   # var.onprem_cidr은 보통 100.64.0.0/10 (Tailscale 기본) 혹은 실제 온프레 대역
-  route {
-    cidr_block           = "100.64.0.0/10"
-    network_interface_id = var.bridge_interface_id # Bridge 인스턴스의 ENI ID
-  }
 
   tags = { Name = "${var.project_name}-private-rt" }
 }

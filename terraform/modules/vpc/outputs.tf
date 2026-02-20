@@ -17,3 +17,4 @@ output "vpc_cidr" {
   description = "VPC CIDR 대역"
   value       = aws_vpc.main.cidr_block
 }
+output "private_route_table_id" { value = aws_route_table.private.id }

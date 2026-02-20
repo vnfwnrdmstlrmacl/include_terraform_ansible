@@ -108,3 +108,12 @@ resource "local_file" "ansible_vars" {
     module.tailscale_bridge
   ]
 }
+#################################################
+# 8. 네트워크 경로 연결 (VPC -> Bridge -> On-Prem)
+#################################################
+# VPC 모듈과 Bridge 모듈이 모두 생성된 후, 실제 라우팅 규칙을 꽂아줍니다.
+resource "aws_route" "private_to_onprem" {
+  route_table_id         = module.vpc.private_route_table_id
+  destination_cidr_block = "100.64.0.0/10" # Tailscale 대역
+  network_interface_id   = module.tailscale_bridge.bridge_interface_id
+}
